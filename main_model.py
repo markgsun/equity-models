@@ -60,15 +60,15 @@ def windsorize(raw):
         ct += 1
     
     # Tests
-    assert abs(out.mean())<0.001
-    assert abs(out.std()-1)<0.001
-    assert max(abs(out))-3<0.001
+    assert abs(out.mean())<0.01
+    assert abs(out.std()-1)<0.01
+    assert max(abs(out))-3<0.01
     
     return out
 
 # Straight momentum alpha
 def alpha_mom_str(data_period):
-    data_diff = data_period.iloc[[-250,-1],:]
+    data_diff = data_period.iloc[[0,-1],:]
     
     # Cumulative return
     ret = data_diff.iloc[1,:]/data_diff.iloc[0,:]-1
@@ -80,7 +80,7 @@ def alpha_mom_str(data_period):
 
 # Weekly volume alpha
 def alpha_vol_wk(data_period):
-    data_1wk = data_period.iloc[-6:-1,:]
+    data_1wk = data_period.iloc[-5:-1,:]
     
     # Average volume
     avg_vol = data_1wk.mean(axis = 0)
@@ -93,8 +93,8 @@ def alpha_vol_wk(data_period):
 # Alpha model
 def alpha_model(t, px_close, px_vol):
     # Calculate individual alphas
-    a_mom = alpha_mom_str(px_close.iloc[0:t,:])
-    a_vol = alpha_vol_wk(px_vol.iloc[0:t,:])
+    a_mom = alpha_mom_str(px_close.iloc[t-250:t,:])
+    a_vol = alpha_vol_wk(px_vol.iloc[t-5:t,:])
     
     # Aggregate alphas
     wts = [0.5,0.5]
@@ -106,11 +106,10 @@ def alpha_model(t, px_close, px_vol):
 # Beta model
 def beta_model(px_close):
     # Construct equal-weighted portfolio
-    ret = px_close.iloc[1:,:]/px_close.iloc[0:-1,:].values-1
+    dates = px_close.index[1:]
+    labels = px_close.columns
+    ret = pd.DataFrame(calc_return(px_close),index = dates, columns = labels)
     ret_eq = ret.mean(axis = 1)
-    
-    # Remove nan
-    ret = ret.fillna(0)
     
     # Create beta series
     beta = pd.Series(0.0, index = px_close.columns)
@@ -128,10 +127,7 @@ def beta_model(px_close):
 # Sigma (covariance) model
 def sigma_model(px_close):
     # Compute returns
-    ret = px_close.iloc[1:,:]/px_close.iloc[0:-1,:].values-1
-    
-    # Remove nan
-    ret = ret.fillna(0)
+    ret = calc_return(px_close)
     
     # Covariance matrix
     lw = covariance.LedoitWolf().fit(ret)
@@ -145,34 +141,108 @@ def sigma_model(px_close):
 # Tau (transaction cost) model
 def tau_model(px_close):
     return [0.0002]*px_close.shape[1]
-# Execution
-if __name__ == '__main__':
-    # Pull data
-    px_close = pull_hist('Close')
-    px_vol = pull_hist('Volume')
+
+# Max trade and position
+def max_size(w):
+    # Maximum trade and position
+    if sum([abs(i) for i in w]) ==0:
+        theta = 150000
+        pi = 10*theta
+    else:
+        theta = min(150000,sum([abs(i) for i in w])*0.01)
+        pi = min(10*theta, sum(np.array(w)[np.array(w)>0]))
     
-    # Time index
-    t = 250
+    # Combine constraints
+    gamma = np.maximum(np.array(w)-theta,[-pi]*len(w))
+    delta = np.minimum(np.array(w)+theta,[pi]*len(w))
+    
+    return gamma, delta
+
+# Optimize portfolio at time t
+def optimize_port(w, beta, sigma, px_close, px_vol, t):
+    # number of stocks
     n = px_close.shape[1]
     
     # Alpha
     alpha_t = alpha_model(t, px_close, px_vol)
+    gamma_t, delta_t = max_size(w)
+    
+    # CVXOPT variables
+    P = cvxopt.matrix(sigma)
+    q = cvxopt.matrix(alpha_t)
+    
+    # Equality
+    A = cvxopt.matrix(np.reshape(beta.values,[1,n]))
+    b = cvxopt.matrix(0, tc = 'd')
+    
+    # Inequalities
+    G = cvxopt.matrix(np.concatenate((np.identity(n)*-1,np.identity(n))))
+    h = cvxopt.matrix(np.concatenate((-gamma_t,delta_t)), tc = 'd')
+    
+    # Solve
+    sol = cvxopt.solvers.qp(P,q,G,h,A,b)
+    
+    # Portfolio
+    port_t = np.array(sol['x'])
+    
+    return port_t
+
+# Calculate daily return
+def calc_return(px):
+    a = px_close.iloc[1:,:].sort_index().values
+    b = px_close.iloc[0:-1,:].sort_index().values
+    ret_full = (a/b)-1
+    ret_full = np.nan_to_num(ret_full, nan = 0)
+    
+    return ret_full
+
+# Execution
+if __name__ == '__main__':
+    # Silence cvxopt
+    cvxopt.solvers.options['show_progress'] = False
+    
+    # Pull data
+    px_close = pull_hist('Close')
+    px_vol = pull_hist('Volume')
+    
+    # Starting time
+    ti = 250
     
     # Beta
     beta = beta_model(px_close)
-    
-    # Sigma (Covariance)
     sigma = sigma_model(px_close)
     
-    # Tau (Transaction Cost)
-    tau = tau_model(px_close)
+    # Full portfolio over time
+    port_full = np.zeros([px_close.shape[0]-ti,px_close.shape[1]])
+    port_t1 = port_full[0,:]
     
-    # Variables
-    lamb = 1
-    mu  = 1
-    pi = 100000
-    theta = [10000]*n
+    # Optimize over time
+    for t in range(ti,px_close.shape[0]):
+        print(px_close.index[t])
+        port_t = optimize_port(port_t1, beta, sigma, px_close, px_vol, t)
+        port_full[t-ti,:] = port_t.flatten()
+        
+        # Tests
+        assert np.dot(port_t.flatten(),beta) < 0.01
+        
+        # Update portfolio
+        port_t1 = port_t
     
+    # Construct portfolio dataframe
+    dates = px_close.index[ti:]
+    labels = px_close.columns
+    port_full_pd = pd.DataFrame(port_full, index = dates, columns = labels)
+    
+    # Calculate returns as dataframe
+    ret_full = pd.DataFrame(calc_return(px_close),index = px_close.index[1:], columns = labels)
+    
+    # Backtest
+    pnl = port_full_pd.iloc[:,0]*0
+    for t in port_full_pd.index:
+        pnl[t] = np.dot(ret_full.loc[t],port_full_pd.loc[t])
+        
+    pnl_cum = pnl.cumsum()
+    pnl_cum.plot()
     
     
     
