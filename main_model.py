@@ -91,12 +91,12 @@ def alpha_vol_wk(data_period):
 # Alpha model
 def alpha_model(t, px_close, px_vol):
     # Calculate individual alphas
-    a_mom = alpha_mom_str(px_close.iloc[t-200:t,:])
+    a_mom = alpha_mom_str(px_close.iloc[t-40:t,:])
     a_vol = alpha_vol_wk(px_vol.iloc[t-5:t,:])
     
     # Aggregate alphas
-    wts = [1,0]
-    alphas = pd.concat([a_mom,a_vol], axis = 1)*wts
+    wts = [1,1]
+    alphas = pd.concat([a_mom,a_vol], axis = 1)*wts/sum(wts)
     alpha = alphas.sum(axis = 1)
     
     return alpha
@@ -203,8 +203,10 @@ def trade_model(px_close, px_vol):
     beta = beta_model(px_close)
     sigma = sigma_model(px_close)
     
+    [m,n] = px_close.shape
+    
     # Full portfolio over time
-    port_full = np.zeros([px_close.shape[0]-ti,px_close.shape[1]])
+    port_full = np.zeros([m-ti,n])
     port_t1 = port_full[0,:]
     
     # Optimize over time
@@ -218,34 +220,18 @@ def trade_model(px_close, px_vol):
         
         # Update portfolio
         port_t1 = port_t
+    
+        # Construct portfolio dataframe
+        dates = px_close.index[ti:]
+        labels = px_close.columns
+        port_full_pd = pd.DataFrame(port_full, index = dates, columns = labels)
         
-    return port_full
+    return port_full_pd
 
-# Execution
-if __name__ == '__main__':
-    # Silence cvxopt
-    cvxopt.solvers.options['show_progress'] = False
-    
-    # Pull data
-    px_close = pull_hist('Close')
-    px_vol = pull_hist('Volume')
-    
-    # Starting time
-    ti = 250
-    
-    # Beta
-    beta = beta_model(px_close)
-    sigma = sigma_model(px_close)
-    
-    # Full portfolio over time
-    port_full = trade_model(px_close, px_vol)
-    
-    # Construct portfolio dataframe
-    dates = px_close.index[ti:]
-    labels = px_close.columns
-    port_full_pd = pd.DataFrame(port_full, index = dates, columns = labels)
-    
+# Backtest
+def backtest(px_close, port_full):
     # Calculate returns as dataframe
+    labels = px_close.columns
     ret_full = pd.DataFrame(calc_return(px_close),index = px_close.index[1:], columns = labels)
     
     # Backtest
@@ -256,5 +242,21 @@ if __name__ == '__main__':
     pnl_cum = pnl.cumsum()
     pnl_cum.plot()
     
+    return pnl_cum
+
+# Execution
+if __name__ == '__main__':
+    # Silence cvxopt
+    cvxopt.solvers.options['show_progress'] = False
+    
+    # Pull data
+    px_close = pull_hist('Close')
+    px_vol = pull_hist('Volume')
+    
+    # Full portfolio over time
+    port_full_pd = trade_model(px_close, px_vol)
+    
+    # Calculate returns as dataframe
+    pnl_cum = backtest(px_close, port_full_pd)
     
     
