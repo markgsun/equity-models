@@ -68,10 +68,8 @@ def windsorize(raw):
 
 # Straight momentum alpha
 def alpha_mom_str(data_period):
-    data_diff = data_period.iloc[[0,-1],:]
-    
     # Cumulative return
-    ret = data_diff.iloc[1,:]/data_diff.iloc[0,:]-1
+    ret = data_period.iloc[-1,:]/data_period.iloc[0,:]-1
     
     # Windsorize
     a_mom = windsorize(ret)
@@ -93,11 +91,11 @@ def alpha_vol_wk(data_period):
 # Alpha model
 def alpha_model(t, px_close, px_vol):
     # Calculate individual alphas
-    a_mom = alpha_mom_str(px_close.iloc[t-250:t,:])
+    a_mom = alpha_mom_str(px_close.iloc[t-200:t,:])
     a_vol = alpha_vol_wk(px_vol.iloc[t-5:t,:])
     
     # Aggregate alphas
-    wts = [0.5,0.5]
+    wts = [1,0]
     alphas = pd.concat([a_mom,a_vol], axis = 1)*wts
     alpha = alphas.sum(axis = 1)
     
@@ -196,15 +194,8 @@ def calc_return(px):
     
     return ret_full
 
-# Execution
-if __name__ == '__main__':
-    # Silence cvxopt
-    cvxopt.solvers.options['show_progress'] = False
-    
-    # Pull data
-    px_close = pull_hist('Close')
-    px_vol = pull_hist('Volume')
-    
+# Model
+def trade_model(px_close, px_vol):
     # Starting time
     ti = 250
     
@@ -227,6 +218,27 @@ if __name__ == '__main__':
         
         # Update portfolio
         port_t1 = port_t
+        
+    return port_full
+
+# Execution
+if __name__ == '__main__':
+    # Silence cvxopt
+    cvxopt.solvers.options['show_progress'] = False
+    
+    # Pull data
+    px_close = pull_hist('Close')
+    px_vol = pull_hist('Volume')
+    
+    # Starting time
+    ti = 250
+    
+    # Beta
+    beta = beta_model(px_close)
+    sigma = sigma_model(px_close)
+    
+    # Full portfolio over time
+    port_full = trade_model(px_close, px_vol)
     
     # Construct portfolio dataframe
     dates = px_close.index[ti:]
