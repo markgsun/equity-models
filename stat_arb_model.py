@@ -8,48 +8,10 @@ Statistical arbitrage trading model for daily returns
 """
 
 import cvxopt
-import datetime as dt
+import equity_shared as eq
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine
 from sklearn import linear_model, covariance
-from urllib import parse
-
-# Pull data from database
-
-# Establish connection to database
-def sqlconn(db):
-    params = parse.quote_plus('DRIVER={SQL Server};'
-                              'SERVER=DESKTOP-9HGRDTD\SQLEXPRESS;'
-                              'DATABASE='+db+';'
-                              'Trusted_Connection=yes')
-
-    engine = create_engine('mssql+pyodbc:///?odbc_connect={}'.format(params))
-    return engine
-
-# Pull data
-def pull_hist(val):
-    # Connect to database
-    engine = sqlconn('FinancialData')
-    
-    # Execute SQL statement
-    res = engine.execute('SELECT * FROM EquityPx')
-    data_raw = pd.DataFrame(res.fetchall())
-    data_raw.columns = res.keys()
-    
-    # Get closing price
-    px_long = data_raw[[val,'Stock','Date']]
-    
-    # Reshape price data
-    px_wide = px_long.pivot(values = val,index = 'Date',columns = 'Stock')
-    
-    # Convert index to dates
-    px_wide.index = [dt.datetime.strptime(date, '%b %d, %Y').date() for date in px_wide.index.values]
-    
-    # Sort by date
-    px_wide = px_wide.sort_index()
-    
-    return px_wide
 
 def windsorize(raw):
     ct = 0
@@ -188,15 +150,6 @@ def optimize_port(w, beta, sigma, px_close, px_vol, t):
     
     return port_t
 
-# Calculate daily return
-def calc_return(px):
-    a = px_close.iloc[1:,:].sort_index().values
-    b = px_close.iloc[0:-1,:].sort_index().values
-    ret_full = (a/b)-1
-    ret_full = np.nan_to_num(ret_full, nan = 0)
-    
-    return ret_full
-
 # Model
 def trade_model(px_close, px_vol):
     # Starting time
@@ -235,7 +188,7 @@ def trade_model(px_close, px_vol):
 def backtest(px_close, port_full):
     # Calculate returns as dataframe
     labels = px_close.columns
-    ret_full = pd.DataFrame(calc_return(px_close),index = px_close.index[1:], columns = labels)
+    ret_full = pd.DataFrame(eq.calc_return(px_close),index = px_close.index[1:], columns = labels)
     
     # Backtest
     pnl = port_full_pd.iloc[:,0]*0
@@ -254,8 +207,8 @@ if __name__ == '__main__':
     cvxopt.solvers.options['show_progress'] = False
     
     # Pull data
-    px_close = pull_hist('Close')
-    px_vol = pull_hist('Volume')
+    px_close = eq.pull_hist('Close')
+    px_vol = eq.pull_hist('Volume')
     
     # Full portfolio over time
     port_full_pd = trade_model(px_close, px_vol)
