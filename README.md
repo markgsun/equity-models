@@ -1,7 +1,7 @@
 # equity-models
 Equity trading and investment models
 
-##Statistical Arbitrage Trading Model
+## Statistical Arbitrage Trading Model
 Contains full stat arb-based trading model, including:
 
 * alpha_model which calculates alpha exposure of cross-section of stocks at certain time
