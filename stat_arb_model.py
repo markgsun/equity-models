@@ -7,9 +7,9 @@ Created on Tue May 12 08:33:00 2020
 Statistical arbitrage trading model for daily returns
 """
 
+import cvxopt
 import datetime as dt
 import numpy as np
-import cvxopt
 import pandas as pd
 from sqlalchemy import create_engine
 from sklearn import linear_model, covariance
