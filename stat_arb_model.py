@@ -3,6 +3,8 @@
 Created on Tue May 12 08:33:00 2020
 
 @author: markg
+
+Statistical arbitrage trading model for daily returns
 """
 
 import datetime as dt
@@ -91,11 +93,11 @@ def alpha_vol_wk(data_period):
 # Alpha model
 def alpha_model(t, px_close, px_vol):
     # Calculate individual alphas
-    a_mom = alpha_mom_str(px_close.iloc[t-40:t,:])
+    a_mom = alpha_mom_str(px_close.iloc[t-60:t,:])
     a_vol = alpha_vol_wk(px_vol.iloc[t-5:t,:])
     
     # Aggregate alphas
-    wts = [1,1]
+    wts = [0,1]
     alphas = pd.concat([a_mom,a_vol], axis = 1)*wts/sum(wts)
     alpha = alphas.sum(axis = 1)
     
@@ -152,6 +154,7 @@ def max_size(w):
     
     # Combine constraints
     gamma = np.maximum(np.array(w)-theta,[-pi]*len(w))
+        
     delta = np.minimum(np.array(w)+theta,[pi]*len(w))
     
     return gamma, delta
@@ -239,6 +242,7 @@ def backtest(px_close, port_full):
     for t in port_full_pd.index:
         pnl[t] = np.dot(ret_full.loc[t],port_full_pd.loc[t])
         
+    # Cumulative pnl
     pnl_cum = pnl.cumsum()
     pnl_cum.plot()
     
