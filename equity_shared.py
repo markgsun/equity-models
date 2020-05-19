@@ -24,12 +24,19 @@ def sqlconn(db):
     return engine
 
 # Pull data
-def pull_hist(val):
+def pull_hist(val, start, end, idx = ''):
     # Connect to database
     engine = sqlconn('FinancialData')
     
     # Execute SQL statement
-    res = engine.execute('SELECT * FROM EquityPx')
+    statement = '''
+                SELECT E.*, S."Index" FROM EquityPx E
+                INNER JOIN SecurityMaster S
+                ON E.Stock = S.Stock
+                WHERE S."Index" LIKE CONCAT('{}','%')
+                AND CONVERT(datetime, E.Date) BETWEEN '{}' AND '{}';
+                '''.format(idx, start, end)
+    res = engine.execute(statement)
     data_raw = pd.DataFrame(res.fetchall())
     data_raw.columns = res.keys()
     

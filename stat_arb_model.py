@@ -31,24 +31,26 @@ def windsorize(raw):
     return out
 
 # Straight momentum alpha
-def alpha_mom_str(data_period):
+def alpha_mom_str(data_period, windsor = True):
     # Cumulative return
     ret = data_period.iloc[-1,:]/data_period.iloc[0,:]-1
     
     # Windsorize
-    a_mom = windsorize(ret)
+    if windsor:
+        a_mom = windsorize(ret)
     
     return a_mom
 
 # Weekly volume alpha
-def alpha_vol_wk(data_period):
+def alpha_vol_wk(data_period, windsor = True):
     data_1wk = data_period.iloc[-5:-1,:]
     
     # Average volume
     avg_vol = data_1wk.mean(axis = 0)
     
     # Windsorize
-    a_vol = windsorize(avg_vol)
+    if windsor:
+        a_vol = windsorize(avg_vol)
     
     return a_vol
 
@@ -130,9 +132,12 @@ def optimize_port(w, beta, sigma, px_close, px_vol, t):
     alpha_t = alpha_model(t, px_close, px_vol)
     gamma_t, delta_t = max_size(w)
     
+    # Modulators
+    mu = 1
+    
     # CVXOPT variables
-    P = cvxopt.matrix(sigma)
-    q = cvxopt.matrix(-alpha_t)
+    P = cvxopt.matrix(mu*sigma)
+    q = cvxopt.matrix(alpha_t)
     
     # Equality
     A = cvxopt.matrix(np.reshape(beta.values,[1,n]))
@@ -175,7 +180,7 @@ def trade_model(px_close, px_vol):
         assert np.dot(port_t.flatten(),beta) < 0.01
         
         # Update portfolio
-        port_t1 = port_t
+        port_t1 = port_t.flatten()
     
         # Construct portfolio dataframe
         dates = px_close.index[ti:]
@@ -207,8 +212,8 @@ if __name__ == '__main__':
     cvxopt.solvers.options['show_progress'] = False
     
     # Pull data
-    px_close = eq.pull_hist('Close')
-    px_vol = eq.pull_hist('Volume')
+    px_close = eq.pull_hist('Close', '2017-01-01', '2020-05-01', idx = 'S&P 500')
+    px_vol = eq.pull_hist('Volume', '2017-01-01', '2020-05-01', idx = 'S&P 500')
     
     # Full portfolio over time
     port_full_pd = trade_model(px_close, px_vol)
