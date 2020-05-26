@@ -13,10 +13,10 @@ import numpy as np
 import pandas as pd
 from sklearn import linear_model, covariance
 
-def windsorize(raw):
+def windsorize(raw, n):
     ct = 0
     out = raw
-    while(ct < 10):
+    while(ct < n):
         # Standardize
         out = (out-out.mean())/out.std()
         # Windsorize
@@ -33,11 +33,10 @@ def windsorize(raw):
 # Straight momentum alpha
 def alpha_mom_str(data_period, windsor = True):
     # Cumulative return
-    ret = data_period.iloc[-1,:]/data_period.iloc[0,:]-1
-    
+    ret = data_period.iloc[0,:]/data_period.iloc[-1,:]-1
     # Windsorize
     if windsor:
-        a_mom = windsorize(ret)
+        a_mom = windsorize(ret, 10)
     
     return a_mom
 
@@ -50,19 +49,28 @@ def alpha_vol_wk(data_period, windsor = True):
     
     # Windsorize
     if windsor:
-        a_vol = windsorize(avg_vol)
+        a_vol = windsorize(avg_vol, 10)
     
     return a_vol
 
+# Book to market alpha
+def alpha_b2m(data_period, windsor = True):
+    # Windsorize
+    if windsor:
+        a_b2m = windsorize(-data_period, 10)
+    
+    return a_b2m
+
 # Alpha model
-def alpha_model(t, px_close, px_vol):
+def alpha_model(t, px_close, px_vol, bk2mkt):
     # Calculate individual alphas
     a_mom = alpha_mom_str(px_close.iloc[t-250:t,:])
     a_vol = alpha_vol_wk(px_vol.iloc[t-5:t,:])
+    a_b2m = alpha_b2m(bk2mkt.iloc[t,:])
     
     # Aggregate alphas
-    wts = [1,0]
-    alphas = pd.concat([a_mom,a_vol], axis = 1)*wts/sum(wts)
+    wts = [1,1,1]
+    alphas = pd.concat([a_mom,a_vol,a_b2m], axis = 1)*wts/sum(wts)
     alpha = alphas.sum(axis = 1)
     
     return alpha
@@ -124,12 +132,12 @@ def max_size(w):
     return gamma, delta
 
 # Optimize portfolio at time t
-def optimize_port(w, beta, sigma, px_close, px_vol, t):
+def optimize_port(w, beta, sigma, px_close, px_vol, bk2mkt, t):
     # number of stocks
     n = px_close.shape[1]
     
     # Alpha
-    alpha_t = alpha_model(t, px_close, px_vol)
+    alpha_t = alpha_model(t, px_close, px_vol, bk2mkt)
     gamma_t, delta_t = max_size(w)
     
     # Modulators
@@ -137,7 +145,7 @@ def optimize_port(w, beta, sigma, px_close, px_vol, t):
     
     # CVXOPT variables
     P = cvxopt.matrix(mu*sigma)
-    q = cvxopt.matrix(alpha_t)
+    q = cvxopt.matrix(-alpha_t)
     
     # Equality
     A = cvxopt.matrix(np.reshape(beta.values,[1,n]))
@@ -156,7 +164,7 @@ def optimize_port(w, beta, sigma, px_close, px_vol, t):
     return port_t
 
 # Model
-def trade_model(px_close, px_vol):
+def trade_model(px_close, px_vol, bk2mkt):
     # Starting time
     ti = 250
     
@@ -173,7 +181,7 @@ def trade_model(px_close, px_vol):
     # Optimize over time
     for t in range(ti,px_close.shape[0]):
         print(px_close.index[t])
-        port_t = optimize_port(port_t1, beta, sigma, px_close, px_vol, t)
+        port_t = optimize_port(port_t1, beta, sigma, px_close, px_vol, bk2mkt, t)
         port_full[t-ti,:] = port_t.flatten()
         
         # Tests
@@ -211,12 +219,18 @@ if __name__ == '__main__':
     # Silence cvxopt
     cvxopt.solvers.options['show_progress'] = False
     
+    # Parameters
+    start = '2017-01-01' 
+    end = '2020-05-01'
+    idx = 'S&P 500'
+    
     # Pull data
-    px_close = eq.pull_hist('Close', '2017-01-01', '2020-05-01', idx = 'S&P 500')
-    px_vol = eq.pull_hist('Volume', '2017-01-01', '2020-05-01', idx = 'S&P 500')
+    px_close = eq.pull_hist('Close', start, end, idx = idx)
+    px_vol = eq.pull_hist('Volume', start, end, idx = idx)
+    bk2mkt = eq.pull_bk2mkt(start, end, px_close, idx = idx)
     
     # Full portfolio over time
-    port_full_pd = trade_model(px_close, px_vol)
+    port_full_pd = trade_model(px_close, px_vol, bk2mkt)
     
     # Calculate returns as dataframe
     pnl_cum = backtest(px_close, port_full_pd)
