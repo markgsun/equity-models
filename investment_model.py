@@ -91,7 +91,7 @@ def portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alph
     
     return ret_bin_cum
 
-def vizualize_backtest(ret_bin_cum):
+def visualize_backtest(ret_bin_cum):
     # Melt data for plot
     ret_long = pd.melt(ret_bin_cum.reset_index(), id_vars = 'index')
     ret_long.columns = ['Date','Bin','Return']
@@ -121,4 +121,4 @@ if __name__ == '__main__':
     ret_bin_cum = portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alpha_wts)
 
     # Plot
-    vizualize_backtest(ret_bin_cum)
+    visualize_backtest(ret_bin_cum)
