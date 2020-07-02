@@ -13,68 +13,6 @@ import numpy as np
 import pandas as pd
 from sklearn import linear_model, covariance
 
-def windsorize(raw, n):
-    ct = 0
-    out = raw
-    while(ct < n):
-        # Standardize
-        out = (out-out.mean())/out.std()
-        # Windsorize
-        out[abs(out)>3] = 3*out[abs(out)>3]/abs(out[abs(out)>3])
-        ct += 1
-    
-    # Tests
-    assert abs(out.mean())<0.01
-    assert abs(out.std()-1)<0.01
-    assert max(abs(out))-3<0.01
-    
-    return out
-
-# Straight momentum alpha
-def alpha_mom_str(data_period, windsor = True):
-    # Cumulative return
-    ret = data_period.iloc[0,:]/data_period.iloc[-1,:]-1
-    # Windsorize
-    if windsor:
-        a_mom = windsorize(ret, 10)
-    
-    return a_mom
-
-# Weekly volume alpha
-def alpha_vol_wk(data_period, windsor = True):
-    data_1wk = data_period.iloc[-5:-1,:]
-    
-    # Average volume
-    avg_vol = data_1wk.mean(axis = 0)
-    
-    # Windsorize
-    if windsor:
-        a_vol = windsorize(avg_vol, 10)
-    
-    return a_vol
-
-# Book to market alpha
-def alpha_b2m(data_period, windsor = True):
-    # Windsorize
-    if windsor:
-        a_b2m = windsorize(-data_period, 10)
-    
-    return a_b2m
-
-# Alpha model
-def alpha_model(t, px_close, px_vol, bk2mkt):
-    # Calculate individual alphas
-    a_mom = alpha_mom_str(px_close.iloc[t-250:t,:])
-    a_vol = alpha_vol_wk(px_vol.iloc[t-5:t,:])
-    a_b2m = alpha_b2m(bk2mkt.iloc[t,:])
-    
-    # Aggregate alphas
-    wts = [1,1,1]
-    alphas = pd.concat([a_mom,a_vol,a_b2m], axis = 1)*wts/sum(wts)
-    alpha = alphas.sum(axis = 1)
-    
-    return alpha
-
 # Beta model
 def beta_model(px_close):
     # Construct equal-weighted portfolio
@@ -137,7 +75,7 @@ def optimize_port(w, beta, sigma, px_close, px_vol, bk2mkt, t):
     n = px_close.shape[1]
     
     # Alpha
-    alpha_t = alpha_model(t, px_close, px_vol, bk2mkt)
+    alpha_t = eq.alpha_model(t, px_close, px_vol, bk2mkt)
     gamma_t, delta_t = max_size(w)
     
     # Modulators
