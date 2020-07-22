@@ -86,7 +86,7 @@ def portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alph
     for t in range(lookback,t_end,holding):
         # Portfolio construction
         alpha_bin, ret_bin = bin_construction(t, holding, px_close, px_vol, bk2mkt, alpha_wts, n_bins, ret_bin, ret_full)
-            
+    
     # Calculate equal weighted index of universe
     ret_bin['Average'] = ret_full.mean(axis = 1)
     # Calculate cumulative returns
@@ -121,17 +121,17 @@ def long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts
     visualize_backtest(ret_bin_cum)
     
     # Identify long and short investments at most recent time period
-    shorts = alpha_bin[alpha_bin['Bin']==0]
-    longs = alpha_bin[alpha_bin['Bin']==n_bins-1]
+    longs = alpha_bin[alpha_bin['Bin']==0]
+    shorts = alpha_bin[alpha_bin['Bin']==n_bins-1]
     
-    return longs, shorts
+    return longs, shorts, ret_bin_cum, alpha_bin
     
 
 # Execution
 if __name__ == '__main__':
     # Parameters
-    start = '2017-01-01' 
-    end = '2020-05-01'
+    start = '2017-01-01'
+    end = '2020-07-01'
     idx = 'S&P 500'
     lookback = 250
     holding = 60
@@ -139,4 +139,4 @@ if __name__ == '__main__':
     alpha_wts = [1,1,1]
     
     # Long-short model
-    longs, shorts = long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts)
+    longs, shorts, ret_bin_cum, alpha_bin = long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts)
