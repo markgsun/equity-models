@@ -13,5 +13,11 @@ Contains full stat arb-based trading model, including:
 *Sources data from local FinancialData database*
 
 Current features:
-* Momentum and volume premium alphas
+* Momentum, volume, and book to market premium alphas
 * No transaction cost optimization
+
+## Investment Model
+Theoretical long-short investment model, featuring:
+
+* Alpha exposures based on same model as statistical arbitrage model
+* Quantile based binned portfolio backtests on highest and lowest alpha exposures
