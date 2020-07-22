@@ -51,6 +51,28 @@ def bin_portfolios(px_close, alpha, n_bins):
     
     return ret_bin_cum, alpha_bin
 
+def bin_construction(t, holding, px_close, px_vol, bk2mkt, alpha_wts, n_bins, ret_bin, ret_full):
+    # Alpha
+    alpha = eq.alpha_model(t, px_close, px_vol, bk2mkt, windsor = True, wts = alpha_wts)  
+    
+    # Divide into bins
+    alpha_bin = split_bin(alpha, n_bins)
+    
+    # Construct portfolios
+    for b in range(n_bins):
+        # Bin portfolio
+        bin_stocks = alpha_bin[alpha_bin['Bin']==b]
+        
+        # Weights
+        wts = px_close.iloc[0,:].copy()
+        wts[:] = 0
+        wts[bin_stocks.index] = 1/bin_stocks.shape[0]
+        
+        # Calculate returns
+        ret_bin.iloc[t:t+holding,b] = np.dot(ret_full.iloc[t:t+holding,:],wts)
+    
+    return alpha_bin, ret_bin
+
 def portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alpha_wts):
     t_end, n = px_close.shape
     
@@ -62,34 +84,19 @@ def portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alph
     
     # For every holding period
     for t in range(lookback,t_end,holding):
-        # Alpha
-        alpha = eq.alpha_model(t, px_close, px_vol, bk2mkt, windsor = True, wts = alpha_wts)  
-        
-        # Divide into bins
-        alpha_bin = split_bin(alpha, n_bins)
-        
-        # Construct portfolios
-        for b in range(n_bins):
-            # Bin portfolio
-            bin_stocks = alpha_bin[alpha_bin['Bin']==b]
+        # Portfolio construction
+        alpha_bin, ret_bin = bin_construction(t, holding, px_close, px_vol, bk2mkt, alpha_wts, n_bins, ret_bin, ret_full)
             
-            # Weights
-            wts = px_close.iloc[0,:].copy()
-            wts[:] = 0
-            wts[bin_stocks.index] = 1/bin_stocks.shape[0]
-            
-            ret_bin.iloc[t:t+holding,b] = np.dot(ret_full.iloc[t:t+holding,:],wts)
-    
     # Calculate equal weighted index of universe
     ret_bin['Average'] = ret_full.mean(axis = 1)
     # Calculate cumulative returns
     ret_bin_cum = pd.DataFrame(np.cumprod(ret_bin.iloc[lookback:,:]+1, axis = 0)-1, index = ret_full.index)
 
     # Update column names
-    cols = ['First Bin']+['Mid Bins']*8+['Last Bin']+['Average']
+    cols = ['First Bin']+['Mid Bins']*(n_bins-2)+['Last Bin']+['Average']
     ret_bin_cum.columns = cols
     
-    return ret_bin_cum
+    return ret_bin_cum, alpha_bin
 
 def visualize_backtest(ret_bin_cum):
     # Melt data for plot
@@ -101,6 +108,25 @@ def visualize_backtest(ret_bin_cum):
     sns.lineplot('Date', 'Return', hue = 'Bin', data=ret_long, ax = ax, legend = 'brief')
     plt.title('Binned portfolio cumulative returns')
 
+def long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts):
+    # Pull data
+    px_close = eq.pull_hist('Close', start, end, idx = idx)
+    px_vol = eq.pull_hist('Volume', start, end, idx = idx)
+    bk2mkt = eq.pull_bk2mkt(start, end, px_close, idx = idx)
+    
+    # Compute portfolio returns
+    ret_bin_cum, alpha_bin = portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alpha_wts)
+    
+    # Plot
+    visualize_backtest(ret_bin_cum)
+    
+    # Identify long and short investments at most recent time period
+    shorts = alpha_bin[alpha_bin['Bin']==0]
+    longs = alpha_bin[alpha_bin['Bin']==n_bins-1]
+    
+    return longs, shorts
+    
+
 # Execution
 if __name__ == '__main__':
     # Parameters
@@ -109,16 +135,8 @@ if __name__ == '__main__':
     idx = 'S&P 500'
     lookback = 250
     holding = 60
-    n_bins = 10
+    n_bins = 50
     alpha_wts = [1,1,1]
     
-    # Pull data
-    px_close = eq.pull_hist('Close', start, end, idx = idx)
-    px_vol = eq.pull_hist('Volume', start, end, idx = idx)
-    bk2mkt = eq.pull_bk2mkt(start, end, px_close, idx = idx)
-    
-    # Compute portfolio returns
-    ret_bin_cum = portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alpha_wts)
-
-    # Plot
-    visualize_backtest(ret_bin_cum)
+    # Long-short model
+    longs, shorts = long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts)
