@@ -21,3 +21,5 @@ Theoretical long-short investment model, featuring:
 
 * Alpha exposures based on same model as statistical arbitrage model
 * Quantile based binned portfolio backtests on highest and lowest alpha exposures
+
+*Sources data from local FinancialData database*
