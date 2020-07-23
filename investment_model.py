@@ -14,8 +14,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 def split_bin(arr,n_bins):
-    # Sort array
+    # Add small random perturbations to array to remove duplicates
     arr = arr + np.random.normal(scale = 0.001, size = arr.shape)
+    # Sort array
     arr_sort = pd.DataFrame(arr).sort_values(0)[10:-10]
     # Divide into buckets
     bin_labels = range(n_bins)
@@ -73,7 +74,7 @@ def bin_construction(t, holding, px_close, px_vol, bk2mkt, alpha_wts, n_bins, re
     
     return alpha_bin, ret_bin
 
-def portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alpha_wts):
+def portfolio_backtest(px_close, px_vol, bk2mkt, sp_close, lookback, holding, n_bins, alpha_wts):
     t_end, n = px_close.shape
     
     # Calculate returns
@@ -89,16 +90,21 @@ def portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alph
     
     # Calculate equal weighted index of universe
     ret_bin['Average'] = ret_full.mean(axis = 1)
+    
+    # Calculate S&P500 returns
+    sp_ret = pd.DataFrame(eq.calc_return(sp_close), columns = sp_close.columns, index = sp_close.index[1:])
+    ret_bin = ret_bin.join(sp_ret)
+    
     # Calculate cumulative returns
     ret_bin_cum = pd.DataFrame(np.cumprod(ret_bin.iloc[lookback:,:]+1, axis = 0)-1, index = ret_full.index)
-
+    
     # Update column names
-    cols = ['First Bin']+['Mid Bins']*(n_bins-2)+['Last Bin']+['Average']
+    cols = ['First Bin']+['Mid Bins']*(n_bins-2)+['Last Bin']+['Average']+['Index']
     ret_bin_cum.columns = cols
     
     return ret_bin_cum, alpha_bin
 
-def visualize_backtest(ret_bin_cum):
+def visualize_backtest(ret_bin_cum, alpha_wts):
     # Melt data for plot
     ret_long = pd.melt(ret_bin_cum.reset_index(), id_vars = 'index')
     ret_long.columns = ['Date','Bin','Return']
@@ -106,19 +112,20 @@ def visualize_backtest(ret_bin_cum):
     # Plot
     fig, ax = plt.subplots(figsize = (12,5), dpi = 100)
     sns.lineplot('Date', 'Return', hue = 'Bin', data=ret_long, ax = ax, legend = 'brief')
-    plt.title('Binned portfolio cumulative returns')
+    plt.title('Binned portfolio cumulative returns '+str(alpha_wts))
 
 def long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts):
     # Pull data
     px_close = eq.pull_hist('Close', start, end, idx = idx)
     px_vol = eq.pull_hist('Volume', start, end, idx = idx)
     bk2mkt = eq.pull_bk2mkt(start, end, px_close, idx = idx)
-    
+    sp_close = eq.pull_hist_ind('Close',start, end)
+
     # Compute portfolio returns
-    ret_bin_cum, alpha_bin = portfolio_backtest(px_close, px_vol, bk2mkt, lookback, holding, n_bins, alpha_wts)
+    ret_bin_cum, alpha_bin = portfolio_backtest(px_close, px_vol, bk2mkt, sp_close, lookback, holding, n_bins, alpha_wts)
     
     # Plot
-    visualize_backtest(ret_bin_cum)
+    visualize_backtest(ret_bin_cum, alpha_wts)
     
     # Identify long and short investments at most recent time period
     longs = alpha_bin[alpha_bin['Bin']==0]
@@ -136,7 +143,7 @@ if __name__ == '__main__':
     lookback = 250
     holding = 60
     n_bins = 50
-    alpha_wts = [0,0,1]
+    alpha_wts = wts = {'Momentum':1,'Volume':1,'Book2Market':1}
     
     # Long-short model
     longs, shorts, ret_bin_cum, alpha_bin = long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts)

@@ -54,6 +54,35 @@ def pull_hist(val, start, end, idx = ''):
     
     return px_wide
 
+# Pull historical index data
+def pull_hist_ind(val, start, end, idx = '%5EGSPC'):
+    # Connect to database
+    engine = sqlconn('FinancialData')
+    
+    # Execute SQL statement
+    statement = '''
+                SELECT * FROM IndexPx
+                WHERE Stock = '{}'
+                AND CONVERT(datetime, Date) BETWEEN '{}' AND '{}';
+                '''.format(idx, start, end)
+    res = engine.execute(statement)
+    data_raw = pd.DataFrame(res.fetchall())
+    data_raw.columns = res.keys()
+    
+    # Get closing price
+    px_long = data_raw[[val,'Stock','Date']]
+    
+    # Reshape price data
+    px_wide = px_long.pivot_table(values = val,index = 'Date',columns = 'Stock', aggfunc = 'mean')
+    
+    # Convert index to dates
+    px_wide.index = [dt.datetime.strptime(date, '%b %d, %Y').date() for date in px_wide.index.values]
+    
+    # Sort by date
+    px_wide = px_wide.sort_index()
+    
+    return px_wide
+
 # Pull book to market data
 def pull_bk2mkt(start, end, px_close, idx = ''):
     # Connect to database
@@ -160,14 +189,17 @@ def alpha_b2m(data_period, windsor = True):
     return a_b2m
 
 # Alpha model
-def alpha_model(t, px_close, px_vol, bk2mkt, windsor = True, wts = [1,1,1]):
+def alpha_model(t, px_close, px_vol, bk2mkt, windsor = True, wts = {'Momentum':1,'Volume':1,'Book2Market':1}):
     # Calculate individual alphas
     a_mom = alpha_mom_str(px_close.iloc[t-250:t,:], windsor)
     a_vol = alpha_vol_wk(px_vol.iloc[t-5:t,:], windsor)
     a_b2m = alpha_b2m(bk2mkt.iloc[t,:], windsor)
     
+    # Pull numeric weights
+    wts_num = [wts['Momentum'],wts['Volume'],wts['Book2Market']]
+    
     # Aggregate alphas
-    alphas = pd.concat([a_mom,a_vol,a_b2m], axis = 1)*wts/sum(wts)
+    alphas = pd.concat([a_mom,a_vol,a_b2m], axis = 1)*wts_num/sum(wts_num)
     alpha = alphas.sum(axis = 1)
     
     return alpha
@@ -175,9 +207,4 @@ def alpha_model(t, px_close, px_vol, bk2mkt, windsor = True, wts = [1,1,1]):
 # Execution
 if __name__ == '__main__':
     
-    start = '2017-01-01'
-    end = '2020-05-01'
-    # idx = 'S&P 500'
-    # px_close = pull_hist('Close', start, end, idx = idx)
-    
-    # bk2mkt_wide = pull_bk2mkt(start, end, px_close, idx = idx)
+    pass
