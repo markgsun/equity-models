@@ -15,8 +15,8 @@ import seaborn as sns
 
 def split_bin(arr,n_bins):
     # Sort array
+    arr = arr + np.random.normal(scale = 0.001, size = arr.shape)
     arr_sort = pd.DataFrame(arr).sort_values(0)[10:-10]
-    
     # Divide into buckets
     bin_labels = range(n_bins)
     arr_sort['Bin'] = pd.qcut(arr_sort.values.flatten(), n_bins, labels = bin_labels)
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     lookback = 250
     holding = 60
     n_bins = 50
-    alpha_wts = [1,1,1]
+    alpha_wts = [0,0,1]
     
     # Long-short model
     longs, shorts, ret_bin_cum, alpha_bin = long_short_investments(start, end, idx, lookback, holding, n_bins, alpha_wts)
