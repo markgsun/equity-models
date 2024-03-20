@@ -8,7 +8,7 @@ Statistical arbitrage trading model for daily returns
 """
 
 import cvxopt
-import equity_shared as eq
+import equity_util as eq
 import numpy as np
 import pandas as pd
 from sklearn import linear_model, covariance
