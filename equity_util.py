@@ -177,7 +177,7 @@ def pull_bk2mkt(start, end, px_close, idx=''):
 def calc_return(px):
     a = px.iloc[1:, :].sort_index().values
     b = px.iloc[0:-1, :].sort_index().values
-    ret_full = (a / b)
+    ret_full = (a / b) - 1
     ret_full = np.nan_to_num(ret_full, nan=0)
 
     ret_pd = pd.DataFrame(data=ret_full,

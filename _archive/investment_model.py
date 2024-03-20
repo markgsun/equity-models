@@ -9,7 +9,7 @@ Long-only investment model for medium horizons
 
 import numpy as np
 import pandas as pd
-import equity_shared as eq
+import equity_util as eq
 import matplotlib.pyplot as plt
 import seaborn as sns
 
